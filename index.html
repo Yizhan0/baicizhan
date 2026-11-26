@@ -2110,7 +2110,7 @@ function renderPool(){
   if(poolPage >= pages) poolPage = pages - 1;
   if(poolPage < 0) poolPage = 0;
   const slice = list.slice(poolPage * POOL_PAGE, (poolPage + 1) * POOL_PAGE);
-  $('poolTtl').textContent = '扩充池待收 ' + POOL.length + ' 词' +
+  $('poolTtl').textContent = '扩充池 · ' + POOL.length + ' 词可选' +
     (poolTag !== 'all' ? '（' + TAG_NAME[poolTag] + ' ' + list.length + '）' : '') +
     (q ? '（搜索 ' + list.length + '）' : '') +
     '　第 ' + (poolPage + 1) + '/' + pages + ' 页';
@@ -2433,7 +2433,7 @@ function showHome(){
   $('rateAll').textContent = sa === null ? '—' : sa + '%';
   $('rateAllSub').textContent = '累计 ' + (as.r + as.w) + ' 题';
   const pb = $('poolBtn');
-  if(pb) pb.textContent = '🎯 扩充池 · 还差 ' + poolList().length + ' 词';
+  if(pb) pb.textContent = '🎯 扩充池 · ' + poolList().length + ' 词可选';
   paintSync();
 }
 
