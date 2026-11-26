@@ -2325,7 +2325,7 @@ function shuffle(a){
 
 function buildQueue(forceAll){
   const all = WORDS.filter(x => !(SRS[x.w] && SRS[x.w].dead)).map(x=>x.w);
-  if(forceAll) return shuffle(all).slice(0, BATCH);
+  if(forceAll) return shuffle(all).slice(0, batchSize());
 
   const due = all.filter(w=>isDue(w));
   due.sort((x,y)=>{
