@@ -200,7 +200,9 @@ footer{margin-top:auto;padding-top:14px;text-align:center;font-size:12px;color:#
   <div class="hint">按上面设定的数量出题 · 答错会当场重出 · 连续答对间隔自动拉长</div>
   <div class="hint" id="emptyTip" style="display:none">词库是空的 · <button class="linkbtn" id="restoreLib">载入内置词库（305 词）</button></div>
   <div class="hint" id="cutLine" style="display:none"><button class="linkbtn" id="cutOpen">已斩 <span id="cutNum">0</span> 词 · 点开可恢复</button></div>
-  <div style="text-align:center;margin-top:10px"><button id="verBtn" class="ver" type="button">v3.6</button></div>
+
+  <div class="hint" id="pendLine" style="display:none"><button class="linkbtn" id="pendBtn"></button></div>
+  <div style="text-align:center;margin-top:10px"><button id="verBtn" class="ver" type="button">v3.7</button></div>
 
   <div class="addbox" id="cutBox" style="display:none">
     <div class="addttl">这些词已经不练了，点「恢复」放回复习队列</div>
@@ -2337,6 +2339,36 @@ function shuffle(a){
 
 let lastErrSet = new Set();
 
+/* 未完成队列：中途关掉页面也能接着练 */
+const PEND_KEY = 'bcb_pending_v1';
+function savePending(nextIdx){
+  try{
+    if(!queue.length) return;
+    const nx = (typeof nextIdx === 'number') ? nextIdx : idx;
+    if(nx >= queue.length) return;
+    localStorage.setItem(PEND_KEY, JSON.stringify({
+      date: today(), words: queue, idx: nx, lastErr: [...lastErrSet]
+    }));
+  }catch(e){}
+}
+function clearPending(){ try{ localStorage.removeItem(PEND_KEY); }catch(e){} }
+function dayDiff(a, b){
+  const A = new Date(a.replace(/-/g,'/')), B = new Date(b.replace(/-/g,'/'));
+  return Math.round((B - A) / 86400000);
+}
+function loadPending(){
+  try{
+    const o = JSON.parse(localStorage.getItem(PEND_KEY) || 'null');
+    if(!o || !o.words || !o.words.length) return null;
+    const dd = dayDiff(o.date, today());
+    if(dd < 0 || dd > 3) return null;
+    const rest = o.words.slice(o.idx || 0).filter(w =>
+      WORDS.some(x=>x.w===w) && !(SRS[w] && SRS[w].dead));
+    if(!rest.length) return null;
+    return {rest: rest, date: o.date, lastErr: o.lastErr || []};
+  }catch(e){ return null; }
+}
+
 function buildQueue(forceAll){
   const all = WORDS.filter(x => !(SRS[x.w] && SRS[x.w].dead)).map(x=>x.w);
   if(forceAll){ lastErrSet = new Set(); return shuffle(all).slice(0, batchSize()); }
@@ -2440,6 +2472,12 @@ function showHome(){
   if(fb2) fb2.textContent = '随便练 ' + batchSize() + ' 个（不按计划）';
   const bs = $('batchSel');
   if(bs && bs.value !== String(batchSize())) bs.value = String(batchSize());
+  const pend = loadPending();
+  const pl = $('pendLine');
+  if(pl){
+    pl.style.display = pend ? 'block' : 'none';
+    if(pend) $('pendBtn').textContent = '上次（' + pend.date.slice(5) + '）还有 ' + pend.rest.length + ' 词没练完 · 接着练';
+  }
   const cutN = cutListWords().length;
   $('cutNum').textContent = cutN;
   $('cutLine').style.display = cutN ? 'block' : 'none';
@@ -2456,7 +2494,16 @@ function showHome(){
 
 function startQuiz(forceAll){
   mode = forceAll ? 'free' : 'daily';
+  const pend = forceAll ? null : loadPending();
   queue = buildQueue(forceAll);
+  if(pend){
+    const restSet = new Set(pend.rest);
+    queue = pend.rest.concat(queue.filter(w=>!restSet.has(w)));
+    lastErrSet = new Set([...(lastErrSet || []), ...pend.lastErr]);
+  }
+  const cap = pend ? Math.max(batchSize(), pend.rest.length) : batchSize();
+  queue = queue.slice(0, cap);
+  clearPending();
   if(!queue.length){ alert('词库里还没有可练的词：点「＋ 自己加词」或去「扩充池」挑几个。'); return; }
   idx = 0; rightCount = 0; badCount = 0; wrongList = [];
   homeEl.style.display = 'none';
@@ -2533,6 +2580,7 @@ function choose(btn, opt, item){
       r.right = (r.right||0) + 1;
       r.last = today();
       save(SRS);
+      savePending(idx + 1);
       rightCount++;
       bumpStat(true);
       updateHeader();
@@ -2579,6 +2627,7 @@ function choose(btn, opt, item){
       r.last = today();
       r.lastWrong = today();
       save(SRS);
+      savePending(idx + 1);
       badCount++;
       bumpStat(false);
     }
@@ -2631,6 +2680,7 @@ function nextQuestion(){
 }
 
 function finish(){
+  clearPending();
   quizEl.style.display = 'none';
   resultEl.style.display = 'flex';
   $('bar').style.width = '100%';
@@ -2985,6 +3035,8 @@ $('batchSel').addEventListener('change', () => {
     showHome();
   }
 });
+
+$('pendBtn').addEventListener('click', () => startQuiz(false));
 
 $('prevBtn').addEventListener('click', () => {
   if(!backStack.length) return;
