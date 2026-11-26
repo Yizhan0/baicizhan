@@ -181,18 +181,26 @@ footer{margin-top:auto;padding-top:14px;text-align:center;font-size:12px;color:#
     <div class="sub" id="dueSub">词库共 0 词</div>
     <div class="sync" id="syncTip">正在连接同步…</div>
     <div class="rates" id="ratesRow">
-      <div class="rt">近期错题率<b id="rateRecent">—</b><em id="rateRecentSub">近 7 天 0 题</em></div>
       <div class="rt">历史错题率<b id="rateAll">—</b><em id="rateAllSub">累计 0 题</em></div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin:4px 0 12px">
+      <span style="font-size:13px;color:#5b6472">每次练</span>
+      <select id="batchSel" style="padding:6px 10px;border-radius:9px;border:1px solid #d9dee7;background:#fff;font-size:13px;color:#2b3340">
+        <option value="5">5 个</option><option value="10">10 个</option><option value="15">15 个</option>
+        <option value="20">20 个</option><option value="25">25 个</option><option value="30">30 个</option>
+        <option value="40">40 个</option><option value="50">50 个</option>
+      </select>
+      <span style="font-size:13px;color:#5b6472">词</span>
     </div>
     <button class="btn btn-primary" id="startBtn">开始今天的复习</button>
     <button class="btn btn-ghost" id="freeBtn">随便练 15 个（不按计划）</button>
     <button class="btn btn-ghost" id="addBtn">＋ 自己加词</button>
     <button class="btn btn-ghost" id="poolBtn">🎯 扩充池</button>
   </div>
-  <div class="hint">每次最多 15 词 · 答错会当场重出 · 连续答对间隔自动拉长</div>
+  <div class="hint">按上面设定的数量出题 · 答错会当场重出 · 连续答对间隔自动拉长</div>
   <div class="hint" id="emptyTip" style="display:none">词库是空的 · <button class="linkbtn" id="restoreLib">载入内置词库（305 词）</button></div>
   <div class="hint" id="cutLine" style="display:none"><button class="linkbtn" id="cutOpen">已斩 <span id="cutNum">0</span> 词 · 点开可恢复</button></div>
-  <div style="text-align:center;margin-top:10px"><button id="verBtn" class="ver" type="button">v3.4</button></div>
+  <div style="text-align:center;margin-top:10px"><button id="verBtn" class="ver" type="button">v3.5</button></div>
 
   <div class="addbox" id="cutBox" style="display:none">
     <div class="addttl">这些词已经不练了，点「恢复」放回复习队列</div>
@@ -2130,7 +2138,12 @@ function renderPool(){
 /* ============ 间隔重复调度 ============ */
 const STORE_KEY = 'bcb_srs_v1';
 const INTERVALS = [1,2,4,7,15,30,60];
-const BATCH = 15;
+const BATCH_DEFAULT = 15;
+const BATCH_KEY = 'bcb_batch_v1';
+function batchSize(){
+  const n = parseInt(localStorage.getItem(BATCH_KEY) || '', 10);
+  return (n >= 1 && n <= 100) ? n : BATCH_DEFAULT;
+}
 
 function load(){ try{ return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; }catch(e){ return {}; } }
 function saveRaw(d){ localStorage.setItem(STORE_KEY, JSON.stringify(d)); }
@@ -2331,11 +2344,11 @@ function buildQueue(forceAll){
   const restErrors = errorWords.filter(w=>rec(w).lastWrong !== yest);
   let pick = lastErrors.concat(restErrors, shuffle(freshDue));
 
-  if(pick.length < BATCH){
+  if(pick.length < batchSize()){
     const rest = all.filter(w=>!isDue(w)).sort((x,y)=>daysLeft(x)-daysLeft(y));
     pick = pick.concat(rest);
   }
-  return pick.slice(0, BATCH);
+  return pick.slice(0, batchSize());
 }
 
 /* ============ 渲染 ============ */
@@ -2406,18 +2419,17 @@ function showHome(){
     (yErr ? ' · 昨日错词 ' + yErr + ' 个已置顶' : '');
   $('emptyTip').style.display = WORDS.length ? 'none' : 'block';
   if(!WORDS.length) $('dueSub').textContent = '词库是空的 · 用「＋ 自己加词」粘贴你的词表，或去扩充池挑';
+  const fb2 = $('freeBtn');
+  if(fb2) fb2.textContent = '随便练 ' + batchSize() + ' 个（不按计划）';
+  const bs = $('batchSel');
+  if(bs && bs.value !== String(batchSize())) bs.value = String(batchSize());
   const cutN = cutListWords().length;
   $('cutNum').textContent = cutN;
   $('cutLine').style.display = cutN ? 'block' : 'none';
   if($('cutBox').style.display === 'block') renderCutList();
   /* 错题率：近期看近 7 天逐题记录，历史看全库累计 */
-  const rsReal = recentStat(7);
-  const rs = ((rsReal.r + rsReal.w) >= 5) ? rsReal : recentStatFallback(7);
   const as = allStat();
-  const sr = (rs.r + rs.w) ? Math.round(rs.w / (rs.r + rs.w) * 100) : null;
   const sa = (as.r + as.w) ? Math.round(as.w / (as.r + as.w) * 100) : null;
-  $('rateRecent').textContent = sr === null ? '—' : sr + '%';
-  $('rateRecentSub').textContent = '近 7 天 ' + (rs.r + rs.w) + ' 题';
   $('rateAll').textContent = sa === null ? '—' : sa + '%';
   $('rateAllSub').textContent = '累计 ' + (as.r + as.w) + ' 题';
   const pb = $('poolBtn');
@@ -2942,6 +2954,14 @@ $('verBtn').addEventListener('click', () => {
   clearTimeout(verTimer);
   verTimer = setTimeout(() => { verHits = 0; }, 1600);
   if(verHits >= 5){ verHits = 0; hardReset(); }
+});
+
+$('batchSel').addEventListener('change', () => {
+  const v = parseInt($('batchSel').value, 10);
+  if(v >= 1 && v <= 100){
+    localStorage.setItem(BATCH_KEY, String(v));
+    showHome();
+  }
 });
 
 $('prevBtn').addEventListener('click', () => {
